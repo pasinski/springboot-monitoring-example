@@ -46,12 +46,9 @@ public class Metrics {
 					.help("Total number of requests.")
 					.register();
 
-	private final Gauge freeDiskSpace = Gauge.build()
-            .name("free_disk_space_percent")
-            .help("Free disk space")
-            .register();
   {
     DefaultExports.initialize();
+    new FreeDiskSpaceCollector().register();
   }
 
   @GET()
@@ -70,7 +67,6 @@ public class Metrics {
     File f = Paths.get("/data").toFile();
 
     logger.info("Starting service for metrics");
-    freeDiskSpace.set( f.getFreeSpace() / f.getTotalSpace() * 100 );
     return output -> {
       try (Writer writer = new OutputStreamWriter(output)) {
         TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples());
