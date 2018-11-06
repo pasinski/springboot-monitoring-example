@@ -67,7 +67,7 @@ public class Metrics {
   @Produces(MediaType.TEXT_PLAIN)
   public StreamingOutput metrics() {
 
-    File f = Paths.get("/dev/mapper/rootvg-var").toFile();
+    File f = Paths.get("/data").toFile();
 
     logger.info("Starting service for metrics");
     freeDiskSpace.set( f.getFreeSpace() / f.getTotalSpace() * 100 );
