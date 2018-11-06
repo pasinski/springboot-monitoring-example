@@ -42,7 +42,7 @@ public class Metrics {
 	private final Logger logger = LogManager.getLogger(Metrics.class);
 
 	private final Counter promRequestsTotal = Counter.build()
-					.name("requests_total")
+					.name("requests_total_mp")
 					.help("Total number of requests.")
 					.register();
 
