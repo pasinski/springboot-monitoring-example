@@ -18,6 +18,7 @@ package de.consol.RestServiceDemo;
 
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.Counter;
+import io.prometheus.client.Gauge;
 import io.prometheus.client.exporter.common.TextFormat;
 import io.prometheus.client.hotspot.DefaultExports;
 import org.apache.logging.log4j.LogManager;
@@ -29,8 +30,10 @@ import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.StreamingOutput;
+import java.io.File;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.nio.file.Paths;
 
 @Component
 @Path("/")
@@ -42,6 +45,11 @@ public class Metrics {
 					.name("requests_total")
 					.help("Total number of requests.")
 					.register();
+
+	private final Gauge freeDiskSpace = Gauge.build()
+            .name("free_disk_space_percent")
+            .help("Free disk space")
+            .register();
   {
     DefaultExports.initialize();
   }
@@ -58,7 +66,11 @@ public class Metrics {
   @Path("/metrics")
   @Produces(MediaType.TEXT_PLAIN)
   public StreamingOutput metrics() {
+
+    File f = Paths.get("/dev/mapper/rootvg-var").toFile();
+
     logger.info("Starting service for metrics");
+    freeDiskSpace.set( f.getFreeSpace() / f.getTotalSpace() * 100 );
     return output -> {
       try (Writer writer = new OutputStreamWriter(output)) {
         TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples());
