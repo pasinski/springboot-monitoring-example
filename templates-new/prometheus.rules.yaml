@@ -1,0 +1,10 @@
+groups:
+- name: pvc
+  interval: 30s # defaults to global interval
+  rules:
+  - alert: PVC_FULL
+    expr: disk_used_space_percents > 90.0
+    annotations:
+      miqTarget: "ContainerNode"
+      severity: "HIGH"
+      message: "{{$labels.partition}} is almost full"

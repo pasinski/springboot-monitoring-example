@@ -404,7 +404,7 @@ objects:
           action: replace
           target_label: kubernetes_name
 
-      # Example scrape config for probing services via the Blackbox Exporter.
+      # Example scrape config for probing services via the ,.
       #
       # The relabeling allows the actual service scrape endpoint to be configured
       # via the following annotations:

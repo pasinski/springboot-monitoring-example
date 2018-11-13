@@ -9,10 +9,7 @@ metadata:
     iconClass: fa fa-cogs
     tags: "monitoring,prometheus,alertmanager,time-series"
 parameters:
-- description: The namespace to instantiate prometheus under. Defaults to 'kube-system'.
-  name: NAMESPACE
-  required: true
-#  value: kube-system
+
 - description: The location of the proxy image
   name: IMAGE_PROXY
   value: openshift/oauth-proxy:v1.0.0
@@ -35,7 +32,6 @@ objects:
   kind: ServiceAccount
   metadata:
     name: prom
-    namespace: "${NAMESPACE}"
     annotations:
       serviceaccounts.openshift.io/oauth-redirectreference.prom: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"prom"}}'
       serviceaccounts.openshift.io/oauth-redirectreference.alerts: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"prom-alerts"}}'
@@ -48,13 +44,11 @@ objects:
   subjects:
   - kind: ServiceAccount
     name: prom
-    namespace: "${NAMESPACE}"
 # Create a fully end-to-end TLS connection to the prometheus proxy
 - apiVersion: route.openshift.io/v1
   kind: Route
   metadata:
     name: prom
-    namespace: "${NAMESPACE}"
   spec:
     to:
       name: prom
@@ -65,13 +59,10 @@ objects:
   kind: Service
   metadata:
     annotations:
-      prometheus.io/scrape: "true"
-      prometheus.io/scheme: https
       service.alpha.openshift.io/serving-cert-secret-name: prom-tls
     labels:
       name: prom
     name: prom
-    namespace: "${NAMESPACE}"
   spec:
     ports:
     - name: prometheus
@@ -86,7 +77,6 @@ objects:
   kind: Secret
   metadata:
     name: prom-proxy
-    namespace: "${NAMESPACE}"
   stringData:
     session_secret: "${SESSION_SECRET}="
 - apiVersion: apps/v1beta1
@@ -95,7 +85,6 @@ objects:
     labels:
       app: prom
     name: prom
-    namespace: "${NAMESPACE}"
   spec:
     updateStrategy:
       type: RollingUpdate
@@ -118,6 +107,11 @@ objects:
           ports:
           - containerPort: 8443
             name: web
+          env:
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
           args:
           - -provider=openshift
           - -https-address=:8443
@@ -149,6 +143,7 @@ objects:
           - --web.listen-address=localhost:9090
           image: ${IMAGE_PROMETHEUS}
           imagePullPolicy: IfNotPresent
+
           volumeMounts:
           - mountPath: /etc/prometheus
             name: prometheus-config
@@ -157,18 +152,25 @@ objects:
 
         # Deploy alertmanager behind an oauth proxy
         # use http port=4190 and https port=9943 to differ from prom-proxy
+        # This is only for web access via route, as prometheus and alert manager
+        # talk to each other directly
         - name: alerts-proxy
           image: ${IMAGE_PROXY}
           imagePullPolicy: IfNotPresent
           ports:
           - containerPort: 9443
             name: web
+          env:
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
           args:
           - -provider=openshift
           - -https-address=:9443
           - -http-address=
           - -email-domain=*
-          - -upstream=http://localhost:9099
+          - -upstream=http://localhost:9093
           - -client-id=system:serviceaccount:$(NAMESPACE):prom
           - -openshift-ca=/etc/pki/tls/cert.pem
           - -openshift-ca=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
@@ -182,18 +184,6 @@ objects:
             name: alerts-tls
           - mountPath: /etc/proxy/secrets
             name: alerts-secrets
-
-        - name: prom-alert-buffer
-          args:
-          - --storage-path=/alert-buffer/messages.db
-          image: ${IMAGE_ALERT_BUFFER}
-          imagePullPolicy: IfNotPresent
-          volumeMounts:
-          - mountPath: /alert-buffer
-            name: alert-buffer-data
-          ports:
-          - containerPort: 9099
-            name: alert-buf
 
         - name: alertmanager
           args:
@@ -244,10 +234,9 @@ objects:
   kind: Route
   metadata:
     name: prom-alerts
-    namespace: "${NAMESPACE}"
   spec:
     to:
-      name: prom-alerts
+      name: prom-alerts-web
     tls:
       termination: Reencrypt
       insecureEdgeTerminationPolicy: Redirect
@@ -255,11 +244,28 @@ objects:
   kind: Service
   metadata:
     annotations:
-      service.alpha.openshift.io/serving-cert-secret-name: prom-alerts-tls
+      prometheus.io/scrape: "true"
+      prometheus.io/path: /metrics
+      prometheus.io/port: "9093"
     labels:
       name: prom-alerts
     name: prom-alerts
-    namespace: "${NAMESPACE}"
+  spec:
+    ports:
+    - name: alerts
+      port: 9999
+      protocol: TCP
+      targetPort: 9093
+    selector:
+      app: prom
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      service.alpha.openshift.io/serving-cert-secret-name: prom-alerts-tls
+    labels:
+      name: prom-alerts-web
+    name: prom-alerts-web
   spec:
     ports:
     - name: alerts
@@ -272,6 +278,5 @@ objects:
   kind: Secret
   metadata:
     name: prom-alerts-proxy
-    namespace: "${NAMESPACE}"
   stringData:
     session_secret: "${SESSION_SECRET}="
